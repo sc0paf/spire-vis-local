@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Spire Run Stats</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg:       #0f1117;
+      --surface:  #1a1d27;
+      --surface2: #22263a;
+      --border:   #2e3350;
+      --accent:   #c084fc;
+      --accent2:  #f472b6;
+      --text:     #e2e8f0;
+      --muted:    #64748b;
+      --danger:   #f87171;
+      --safe:     #4ade80;
+      --warn:     #fbbf24;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    header { padding: 1.25rem 2rem 0; border-bottom: 1px solid var(--border); }
+    .header-top { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+    header h1 { font-size: 1.5rem; font-weight: 700; background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    header .subtitle { color: var(--muted); font-size: 0.875rem; }
+
+    .tab-nav { display: flex; }
+    .tab-btn { padding: 0.6rem 1.5rem; background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: color 0.15s, border-color 0.15s; letter-spacing: 0.02em; }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    .container { max-width: 1400px; margin: 0 auto; padding: 1.5rem 2rem; }
+
+    .filters { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; padding: 1rem 1.5rem; background: var(--surface); border: 1px solid var(--border); border-radius: 0.75rem; margin-bottom: 1.5rem; }
+    .filter-group { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+    .filter-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); white-space: nowrap; }
+    .pill { padding: 0.3rem 0.75rem; border-radius: 999px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); font-size: 0.8rem; cursor: pointer; transition: all 0.15s; user-select: none; }
+    .pill:hover { border-color: var(--accent); color: var(--accent); }
+    .pill.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .divider { width: 1px; height: 2rem; background: var(--border); flex-shrink: 0; }
+
+    .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+    .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 0.75rem; padding: 1.25rem 1.5rem; }
+    .stat-card .label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 0.4rem; }
+    .stat-card .value { font-size: 2rem; font-weight: 700; line-height: 1; }
+    .stat-card .sub   { font-size: 0.75rem; color: var(--muted); margin-top: 0.25rem; }
+    .color-green  { color: var(--safe); }
+    .color-red    { color: var(--danger); }
+    .color-yellow { color: var(--warn); }
+    .color-purple { color: var(--accent); }
+
+    .grid-main { display: grid; grid-template-columns: 1fr 340px; gap: 1.5rem; margin-bottom: 1.5rem; }
+    @media (max-width: 900px) { .grid-main { grid-template-columns: 1fr; } }
+    .grid-secondary { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
+    @media (max-width: 700px) { .grid-secondary { grid-template-columns: 1fr; } }
+    .cards-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
+    @media (max-width: 800px) { .cards-grid { grid-template-columns: 1fr; } }
+
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 0.75rem; padding: 1.25rem 1.5rem; }
+    .card-title { font-size: 0.875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 1rem; }
+    .chart-wrap { position: relative; }
+    .chart-wrap.tall   { height: 520px; }
+    .chart-wrap.medium { height: 240px; }
+    .chart-wrap.small  { height: 200px; }
+    .chart-wrap.xlarge { height: 640px; }
+
+    .table-scroll { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.825rem; }
+    thead th { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); color: var(--muted); font-weight: 500; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
+    tbody tr { border-bottom: 1px solid var(--border); }
+    tbody tr:last-child { border-bottom: none; }
+    tbody td { padding: 0.5rem 0.75rem; }
+    tbody tr:hover { background: var(--surface2); }
+    .rank-badge { display: inline-block; width: 1.5rem; height: 1.5rem; border-radius: 50%; text-align: center; line-height: 1.5rem; font-size: 0.7rem; font-weight: 700; background: var(--surface2); color: var(--muted); }
+    .rank-1 { background: #b45309; color: #fff; }
+    .rank-2 { background: #475569; color: #fff; }
+    .rank-3 { background: #92400e; color: #fff; }
+    .bar-bg   { background: var(--surface2); border-radius: 999px; height: 6px; flex: 1; overflow: hidden; min-width: 60px; }
+    .bar-fill { height: 100%; border-radius: 999px; }
+    .bar-row  { display: flex; align-items: center; gap: 0.5rem; }
+
+    .sort-controls { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+    .sort-label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .sort-btn { padding: 0.25rem 0.6rem; border-radius: 0.375rem; border: 1px solid var(--border); background: var(--surface2); color: var(--muted); font-size: 0.75rem; cursor: pointer; transition: all 0.15s; }
+    .sort-btn:hover { color: var(--text); border-color: var(--accent); }
+    .sort-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .min-offered-row { display: flex; align-items: center; gap: 0.75rem; font-size: 0.8rem; color: var(--muted); }
+    .min-offered-row input[type=range] { accent-color: var(--accent); width: 100px; }
+    .min-offered-row span { color: var(--text); font-weight: 600; min-width: 1.5rem; }
+
+    #loading { text-align: center; padding: 4rem; color: var(--muted); font-size: 0.9rem; }
+    #app { display: none; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-top">
+    <div>
+      <h1>⚔ Spire Run Stats</h1>
+      <div class="subtitle">Local run history analyzer</div>
+    </div>
+  </div>
+  <nav class="tab-nav">
+    <button class="tab-btn active" data-tab="deaths">Deaths</button>
+    <button class="tab-btn"        data-tab="cards">Cards Picked</button>
+  </nav>
+</header>
+
+<div id="loading">Loading run data…</div>
+
+<div id="app">
+
+  <!-- TAB 1 — DEATHS -->
+  <div class="tab-panel active" id="tab-deaths">
+    <div class="container">
+      <div class="filters">
+        <span class="filter-label">Character</span>
+        <div class="filter-group" id="char-filters"></div>
+        <div class="divider"></div>
+        <span class="filter-label">Outcome</span>
+        <div class="filter-group" id="outcome-filters">
+          <span class="pill active" data-outcome="all">All</span>
+          <span class="pill" data-outcome="loss">Deaths only</span>
+          <span class="pill" data-outcome="win">Wins only</span>
+        </div>
+        <div class="divider"></div>
+        <span class="filter-label">Acts completed</span>
+        <div class="filter-group" id="acts-filters"></div>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat-card"><div class="label">Total Runs</div><div class="value color-purple" id="stat-total">—</div><div class="sub" id="stat-period"></div></div>
+        <div class="stat-card"><div class="label">Wins</div><div class="value color-green" id="stat-wins">—</div><div class="sub" id="stat-winrate"></div></div>
+        <div class="stat-card"><div class="label">Deaths</div><div class="value color-red" id="stat-deaths">—</div><div class="sub" id="stat-abandoned"></div></div>
+        <div class="stat-card"><div class="label">Top Killer</div><div class="value color-yellow" id="stat-killer-count">—</div><div class="sub" id="stat-killer-name"></div></div>
+        <div class="stat-card"><div class="label">Avg Acts Reached</div><div class="value color-purple" id="stat-acts">—</div><div class="sub">acts per run</div></div>
+      </div>
+
+      <div class="grid-main">
+        <div class="card">
+          <div class="card-title">Deaths by Encounter (Top 25)</div>
+          <div class="chart-wrap tall"><canvas id="chart-deaths"></canvas></div>
+        </div>
+        <div class="card" style="display:flex;flex-direction:column;gap:1.5rem;">
+          <div>
+            <div class="card-title">Win / Loss Ratio</div>
+            <div class="chart-wrap medium"><canvas id="chart-winloss"></canvas></div>
+          </div>
+          <div>
+            <div class="card-title">Runs by Character</div>
+            <div class="chart-wrap medium"><canvas id="chart-chars"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-secondary">
+        <div class="card">
+          <div class="card-title">Win Rate by Character</div>
+          <div class="chart-wrap small" style="height:180px;"><canvas id="chart-winrate-char"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Deaths by Act Reached</div>
+          <div class="chart-wrap small" style="height:180px;"><canvas id="chart-acts-death"></canvas></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Encounter Death Breakdown</div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th style="width:3rem;">#</th><th>Encounter</th><th>Type</th><th>Deaths</th><th style="min-width:150px;">Share of Deaths</th></tr></thead>
+            <tbody id="death-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 2 — CARDS PICKED -->
+  <div class="tab-panel" id="tab-cards">
+    <div class="container">
+      <div class="filters">
+        <span class="filter-label">Character</span>
+        <div class="filter-group" id="cards-char-filters"></div>
+        <div class="divider"></div>
+        <span class="filter-label">Act</span>
+        <div class="filter-group" id="cards-act-filters"></div>
+      </div>
+
+      <div class="stats-row" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));">
+        <div class="stat-card"><div class="label">Cards Offered</div><div class="value color-purple" id="cstat-offered">—</div><div class="sub">unique card types</div></div>
+        <div class="stat-card"><div class="label">Total Picks</div><div class="value color-green" id="cstat-picked">—</div><div class="sub" id="cstat-pickrate"></div></div>
+        <div class="stat-card"><div class="label">Most Picked</div><div class="value color-yellow" id="cstat-top-count">—</div><div class="sub" id="cstat-top-name"></div></div>
+        <div class="stat-card"><div class="label">Highest Pick Rate</div><div class="value color-green" id="cstat-bestrate-pct">—</div><div class="sub" id="cstat-bestrate-name"></div></div>
+        <div class="stat-card"><div class="label">Most Skipped</div><div class="value color-red" id="cstat-skipped-count">—</div><div class="sub" id="cstat-skipped-name"></div></div>
+      </div>
+
+      <div class="cards-grid">
+        <div class="card">
+          <div class="card-title">Top 20 Most Picked Cards</div>
+          <div class="chart-wrap xlarge"><canvas id="chart-cards-picked"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Top 20 by Pick Rate <span style="color:var(--muted);font-weight:400;font-size:0.75rem;">(min 3 offers)</span></div>
+          <div class="chart-wrap xlarge"><canvas id="chart-cards-rate"></canvas></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1rem;">
+          <div class="card-title" style="margin-bottom:0;">All Cards</div>
+          <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:center;">
+            <div class="min-offered-row">
+              Min offers:&nbsp;<input type="range" id="min-offered" min="1" max="20" value="1">
+              <span id="min-offered-val">1</span>
+            </div>
+            <div class="sort-controls">
+              <span class="sort-label">Sort:</span>
+              <button class="sort-btn active" data-sort="picked">Most Picked</button>
+              <button class="sort-btn" data-sort="rate">Pick Rate</button>
+              <button class="sort-btn" data-sort="skipped">Most Skipped</button>
+              <button class="sort-btn" data-sort="offered">Most Offered</button>
+            </div>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr>
+              <th style="width:3rem;">#</th>
+              <th>Card</th>
+              <th>Offered</th>
+              <th>Picked</th>
+              <th style="min-width:160px;">Pick Rate</th>
+              <th>Skipped</th>
+            </tr></thead>
+            <tbody id="cards-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- #app -->
+
+<script>
+// ── Utilities ─────────────────────────────────────────────────────────────────
+const fmt = (s) => {
+  const parts = s.split('.');
+  return parts[parts.length-1].replace(/_/g,' ').toLowerCase().replace(/\b\w/g,c=>c.toUpperCase());
+};
+const fmtCard = (s) => s.replace(/_/g,' ').toLowerCase().replace(/\b\w/g,c=>c.toUpperCase());
+
+const encounterType = (s) => {
+  if (s.endsWith('_BOSS'))  return 'Boss';
+  if (s.endsWith('_ELITE')) return 'Elite';
+  if (s.startsWith('EVENT.')) return 'Event';
+  return 'Normal';
+};
+const typeColor = (t) => ({'Boss':'#f87171','Elite':'#fbbf24','Normal':'#60a5fa','Event':'#a78bfa'}[t]||'#64748b');
+
+Chart.defaults.color = '#e2e8f0';
+Chart.defaults.borderColor = '#2e3350';
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+let activeTab = 'deaths';
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    activeTab = btn.dataset.tab;
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b===btn));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id===`tab-${activeTab}`));
+    if (activeTab === 'cards' && allCards.length) refreshCards();
+  });
+});
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let allRuns  = [];
+let allCards = [];
+
+let activeChars   = new Set(['ALL']);
+let activeOutcome = 'all';
+let activeActs    = new Set(['ALL']);
+
+let cardsActiveChars = new Set(['ALL']);
+let cardsActiveActs  = new Set(['ALL']);
+let cardsSortMode    = 'picked';
+let cardsMinOffered  = 1;
+
+let charts = {};
+
+// ── Shared pill helper ────────────────────────────────────────────────────────
+function makePill(label, group, value, isActive) {
+  const el = document.createElement('span');
+  el.className = 'pill' + (isActive ? ' active' : '');
+  el.textContent = label;
+  el.dataset.group = group;
+  el.dataset.value = value;
+  el.addEventListener('click', () => togglePill(el, group, value));
+  return el;
+}
+
+function togglePill(el, group, value) {
+  const map = {
+    'char':       { get: ()=>activeChars,       set: s=>{ activeChars=s; },       sel: '[data-group="char"]',       cb: refresh },
+    'acts':       { get: ()=>activeActs,         set: s=>{ activeActs=s; },        sel: '[data-group="acts"]',       cb: refresh },
+    'cards-char': { get: ()=>cardsActiveChars,   set: s=>{ cardsActiveChars=s; },  sel: '[data-group="cards-char"]', cb: refreshCards },
+    'cards-act':  { get: ()=>cardsActiveActs,    set: s=>{ cardsActiveActs=s; },   sel: '[data-group="cards-act"]',  cb: refreshCards },
+  };
+  const { get, set, sel, cb } = map[group];
+  let next = new Set(get());
+  if (value === 'ALL') {
+    next = new Set(['ALL']);
+  } else {
+    next.delete('ALL');
+    if (next.has(value)) { next.delete(value); if (next.size===0) next.add('ALL'); }
+    else next.add(value);
+  }
+  set(next);
+  document.querySelectorAll(sel).forEach(p =>
+    p.classList.toggle('active', p.dataset.value==='ALL' ? next.has('ALL') : next.has(p.dataset.value)));
+  cb();
+}
+
+// ── Deaths tab — filters ──────────────────────────────────────────────────────
+function buildDeathsFilters() {
+  const chars   = [...new Set(allRuns.map(r=>r.character))].sort();
+  const actsSet = [...new Set(allRuns.map(r=>r.acts))].sort((a,b)=>a-b);
+
+  const cc = document.getElementById('char-filters');
+  cc.innerHTML = '';
+  cc.appendChild(makePill('All','char','ALL',true));
+  chars.forEach(c => cc.appendChild(makePill(c,'char',c,false)));
+
+  const ac = document.getElementById('acts-filters');
+  ac.innerHTML = '';
+  ac.appendChild(makePill('All','acts','ALL',true));
+  actsSet.forEach(a => ac.appendChild(makePill(`${a} act${a!==1?'s':''}`, 'acts', String(a), false)));
+
+  document.querySelectorAll('[data-outcome]').forEach(el => {
+    el.addEventListener('click', () => {
+      activeOutcome = el.dataset.outcome;
+      document.querySelectorAll('[data-outcome]').forEach(p => p.classList.remove('active'));
+      el.classList.add('active');
+      refresh();
+    });
+  });
+}
+
+// ── Cards tab — filters ───────────────────────────────────────────────────────
+function buildCardsFilters() {
+  const chars = [...new Set(allCards.map(c=>c.character))].sort();
+  const acts  = [...new Set(allCards.map(c=>c.act))].sort();
+
+  const cc = document.getElementById('cards-char-filters');
+  cc.innerHTML = '';
+  cc.appendChild(makePill('All','cards-char','ALL',true));
+  chars.forEach(c => cc.appendChild(makePill(c,'cards-char',c,false)));
+
+  const ac = document.getElementById('cards-act-filters');
+  ac.innerHTML = '';
+  ac.appendChild(makePill('All','cards-act','ALL',true));
+  acts.forEach(a => ac.appendChild(makePill(a,'cards-act',a,false)));
+}
+
+// ── Deaths tab — data helpers ─────────────────────────────────────────────────
+function filteredRuns() {
+  return allRuns.filter(r => {
+    const charOk = activeChars.has('ALL') || activeChars.has(r.character);
+    const actsOk = activeActs.has('ALL')  || activeActs.has(String(r.acts));
+    const outOk  = activeOutcome==='all'
+                || (activeOutcome==='win'  &&  r.win)
+                || (activeOutcome==='loss' && !r.win && !r.abandoned);
+    return charOk && actsOk && outOk;
+  });
+}
+
+// ── Deaths tab — render ───────────────────────────────────────────────────────
+function destroyChart(id) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
+
+function updateStats(runs) {
+  const wins = runs.filter(r=>r.win).length;
+  const ab   = runs.filter(r=>r.abandoned).length;
+  document.getElementById('stat-total').textContent     = runs.length;
+  document.getElementById('stat-wins').textContent      = wins;
+  document.getElementById('stat-winrate').textContent   = runs.length ? `${((wins/runs.length)*100).toFixed(1)}% win rate` : '—';
+  document.getElementById('stat-deaths').textContent    = runs.length-wins-ab;
+  document.getElementById('stat-abandoned').textContent = `${ab} abandoned`;
+  document.getElementById('stat-acts').textContent      = runs.length
+    ? (runs.reduce((s,r)=>s+r.acts,0)/runs.length).toFixed(1) : '—';
+
+  const kc={};
+  runs.filter(r=>!r.win&&!r.abandoned).forEach(r=>{ if(r.killed_by!=='NONE.NONE') kc[r.killed_by]=(kc[r.killed_by]||0)+1; });
+  const top=Object.entries(kc).sort((a,b)=>b[1]-a[1])[0];
+  document.getElementById('stat-killer-count').textContent = top?top[1]:'—';
+  document.getElementById('stat-killer-name').textContent  = top?fmt(top[0]):'';
+}
+
+function buildDeathChart(runs) {
+  destroyChart('deaths');
+  const dr=runs.filter(r=>!r.win&&!r.abandoned&&r.killed_by!=='NONE.NONE'), c={};
+  dr.forEach(r=>{ c[r.killed_by]=(c[r.killed_by]||0)+1; });
+  const s=Object.entries(c).sort((a,b)=>b[1]-a[1]).slice(0,25);
+  charts['deaths']=new Chart(document.getElementById('chart-deaths'),{
+    type:'bar',
+    data:{labels:s.map(([k])=>fmt(k)),datasets:[{data:s.map(([,v])=>v),backgroundColor:s.map(([k])=>typeColor(encounterType(k))),borderRadius:4,borderSkipped:false}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.parsed.x} death${c.parsed.x!==1?'s':''}`}}},
+      scales:{x:{grid:{color:'#2e3350'},ticks:{color:'#94a3b8',precision:0},title:{display:true,text:'Deaths',color:'#64748b'}},y:{grid:{color:'transparent'},ticks:{color:'#cbd5e1',font:{size:12}}}}}
+  });
+}
+
+function buildWinLossChart(runs) {
+  destroyChart('winloss');
+  const wins=runs.filter(r=>r.win).length,ab=runs.filter(r=>r.abandoned).length;
+  charts['winloss']=new Chart(document.getElementById('chart-winloss'),{
+    type:'doughnut',
+    data:{labels:['Wins','Deaths','Abandoned'],datasets:[{data:[wins,runs.length-wins-ab,ab],backgroundColor:['#4ade80','#f87171','#fbbf24'],borderWidth:2,borderColor:'#1a1d27'}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'65%',
+      plugins:{legend:{position:'right',labels:{boxWidth:12,padding:16}},
+        tooltip:{callbacks:{label:c=>` ${c.label}: ${c.parsed} (${((c.parsed/runs.length)*100).toFixed(1)}%)`}}}}
+  });
+}
+
+function buildCharChart(runs) {
+  destroyChart('chars');
+  const c={};runs.forEach(r=>{ c[r.character]=(c[r.character]||0)+1; });
+  const s=Object.entries(c).sort((a,b)=>b[1]-a[1]);
+  charts['chars']=new Chart(document.getElementById('chart-chars'),{
+    type:'doughnut',
+    data:{labels:s.map(([k])=>k),datasets:[{data:s.map(([,v])=>v),backgroundColor:['#c084fc','#f472b6','#60a5fa','#34d399','#fbbf24','#f87171'],borderWidth:2,borderColor:'#1a1d27'}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'65%',plugins:{legend:{position:'right',labels:{boxWidth:12,padding:14,font:{size:11}}}}}
+  });
+}
+
+function buildWinrateByCharChart(runs) {
+  destroyChart('winrate-char');
+  const st={};
+  runs.forEach(r=>{ if(!st[r.character]) st[r.character]={wins:0,total:0}; st[r.character].total++; if(r.win) st[r.character].wins++; });
+  const s=Object.entries(st).sort((a,b)=>b[1].total-a[1].total);
+  const rates=s.map(([,v])=>v.total?+((v.wins/v.total*100).toFixed(1)):0);
+  charts['winrate-char']=new Chart(document.getElementById('chart-winrate-char'),{
+    type:'bar',
+    data:{labels:s.map(([k])=>k),datasets:[{data:rates,backgroundColor:rates.map(v=>v>=30?'#4ade80':v>=15?'#fbbf24':'#f87171'),borderRadius:4}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.parsed.y}% win rate`,afterLabel:c=>{ const x=st[c.label]; return `${x.wins}W / ${x.total-x.wins}L (${x.total} runs)`; }}}},
+      scales:{x:{grid:{color:'transparent'},ticks:{color:'#94a3b8',font:{size:11}}},y:{grid:{color:'#2e3350'},ticks:{color:'#94a3b8',callback:v=>v+'%'},max:100,min:0}}}
+  });
+}
+
+function buildActsDeathChart(runs) {
+  destroyChart('acts-death');
+  const c={};runs.filter(r=>!r.win&&!r.abandoned).forEach(r=>{ const k=String(r.acts);c[k]=(c[k]||0)+1; });
+  const s=Object.entries(c).sort((a,b)=>Number(a[0])-Number(b[0]));
+  charts['acts-death']=new Chart(document.getElementById('chart-acts-death'),{
+    type:'bar',
+    data:{labels:s.map(([k])=>`${k} act${k!=='1'?'s':''}`),datasets:[{data:s.map(([,v])=>v),backgroundColor:'#f87171',borderRadius:4}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.parsed.y} deaths`}}},
+      scales:{x:{grid:{color:'transparent'},ticks:{color:'#94a3b8'}},y:{grid:{color:'#2e3350'},ticks:{color:'#94a3b8',precision:0}}}}
+  });
+}
+
+function buildDeathTable(runs) {
+  const dr=runs.filter(r=>!r.win&&!r.abandoned&&r.killed_by!=='NONE.NONE'),c={};
+  dr.forEach(r=>{ c[r.killed_by]=(c[r.killed_by]||0)+1; });
+  const s=Object.entries(c).sort((a,b)=>b[1]-a[1]),max=s[0]?.[1]||1,total=dr.length;
+  document.getElementById('death-table').innerHTML=s.map(([enc,n],i)=>{
+    const t=encounterType(enc),pct=((n/total)*100).toFixed(1),w=((n/max)*100).toFixed(1);
+    return `<tr><td><span class="rank-badge ${i<3?`rank-${i+1}`:''}">${i+1}</span></td><td>${fmt(enc)}</td><td><span style="color:${typeColor(t)}">${t}</span></td><td><strong>${n}</strong></td><td><div class="bar-row"><div class="bar-bg"><div class="bar-fill" style="width:${w}%;background:var(--danger)"></div></div><span style="color:var(--muted);font-size:.75rem;min-width:3rem">${pct}%</span></div></td></tr>`;
+  }).join('');
+}
+
+function refresh() {
+  const runs=filteredRuns();
+  updateStats(runs);buildDeathChart(runs);buildWinLossChart(runs);buildCharChart(runs);buildWinrateByCharChart(runs);buildActsDeathChart(runs);buildDeathTable(runs);
+}
+
+// ── Cards tab — data helpers ──────────────────────────────────────────────────
+function filteredCardRows() {
+  const agg={};
+  allCards.forEach(r => {
+    if (!(cardsActiveChars.has('ALL') || cardsActiveChars.has(r.character))) return;
+    if (!(cardsActiveActs.has('ALL')  || cardsActiveActs.has(r.act)))        return;
+    if (!agg[r.card]) agg[r.card]={offered:0,picked:0};
+    agg[r.card].offered+=r.offered;
+    agg[r.card].picked +=r.picked;
+  });
+  return Object.entries(agg).map(([card,v])=>({
+    card, offered:v.offered, picked:v.picked,
+    skipped: v.offered-v.picked,
+    rate: v.offered ? v.picked/v.offered : 0,
+  }));
+}
+
+// ── Cards tab — render ────────────────────────────────────────────────────────
+function refreshCards() {
+  const rows=filteredCardRows();
+  const totalOff=rows.reduce((s,r)=>s+r.offered,0);
+  const totalPick=rows.reduce((s,r)=>s+r.picked,0);
+  document.getElementById('cstat-offered').textContent  = rows.length;
+  document.getElementById('cstat-picked').textContent   = totalPick;
+  document.getElementById('cstat-pickrate').textContent = totalOff ? `${((totalPick/totalOff)*100).toFixed(1)}% avg pick rate` : '—';
+
+  const byPick   = [...rows].sort((a,b)=>b.picked-a.picked);
+  const byRate   = [...rows].filter(r=>r.offered>=3).sort((a,b)=>b.rate-a.rate);
+  const bySkip   = [...rows].sort((a,b)=>b.skipped-a.skipped);
+
+  document.getElementById('cstat-top-count').textContent    = byPick[0]?.picked ?? '—';
+  document.getElementById('cstat-top-name').textContent     = byPick[0] ? fmtCard(byPick[0].card) : '';
+  document.getElementById('cstat-bestrate-pct').textContent = byRate[0] ? `${(byRate[0].rate*100).toFixed(0)}%` : '—';
+  document.getElementById('cstat-bestrate-name').textContent= byRate[0] ? `${fmtCard(byRate[0].card)} (${byRate[0].offered} offers)` : '';
+  document.getElementById('cstat-skipped-count').textContent= bySkip[0]?.skipped ?? '—';
+  document.getElementById('cstat-skipped-name').textContent = bySkip[0] ? fmtCard(bySkip[0].card) : '';
+
+  buildCardsPickedChart(byPick.slice(0,20));
+  buildCardsRateChart(byRate.slice(0,20));
+  buildCardsTable(rows);
+}
+
+function buildCardsPickedChart(rows) {
+  destroyChart('cards-picked');
+  charts['cards-picked']=new Chart(document.getElementById('chart-cards-picked'),{
+    type:'bar',
+    data:{labels:rows.map(r=>fmtCard(r.card)),datasets:[{data:rows.map(r=>r.picked),backgroundColor:'#c084fc',borderRadius:4,borderSkipped:false}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.parsed.x} picks`,afterLabel:c=>{ const r=rows[c.dataIndex]; return `Offered ${r.offered}× — pick rate ${(r.rate*100).toFixed(0)}%`; }}}},
+      scales:{x:{grid:{color:'#2e3350'},ticks:{color:'#94a3b8',precision:0}},y:{grid:{color:'transparent'},ticks:{color:'#cbd5e1',font:{size:12}}}}}
+  });
+}
+
+function buildCardsRateChart(rows) {
+  destroyChart('cards-rate');
+  const pcts=rows.map(r=>+(r.rate*100).toFixed(1));
+  charts['cards-rate']=new Chart(document.getElementById('chart-cards-rate'),{
+    type:'bar',
+    data:{labels:rows.map(r=>fmtCard(r.card)),datasets:[{data:pcts,backgroundColor:pcts.map(p=>p>=75?'#4ade80':p>=50?'#fbbf24':'#60a5fa'),borderRadius:4,borderSkipped:false}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.parsed.x}% pick rate`,afterLabel:c=>{ const r=rows[c.dataIndex]; return `${r.picked} picked / ${r.offered} offered`; }}}},
+      scales:{x:{grid:{color:'#2e3350'},ticks:{color:'#94a3b8',callback:v=>v+'%'},max:100,min:0},y:{grid:{color:'transparent'},ticks:{color:'#cbd5e1',font:{size:12}}}}}
+  });
+}
+
+function buildCardsTable(rows) {
+  const sorted=[...rows]
+    .filter(r=>r.offered>=cardsMinOffered)
+    .sort((a,b)=>{
+      if(cardsSortMode==='picked')  return b.picked -a.picked;
+      if(cardsSortMode==='rate')    return b.rate   -a.rate;
+      if(cardsSortMode==='skipped') return b.skipped-a.skipped;
+      if(cardsSortMode==='offered') return b.offered-a.offered;
+      return 0;
+    });
+  document.getElementById('cards-table').innerHTML=sorted.map((r,i)=>{
+    const pct=(r.rate*100).toFixed(1),w=(r.rate*100).toFixed(1);
+    const bc=r.rate>=0.75?'#4ade80':r.rate>=0.5?'#fbbf24':'#60a5fa';
+    return `<tr><td><span class="rank-badge ${i<3?`rank-${i+1}`:''}">${i+1}</span></td><td><strong>${fmtCard(r.card)}</strong></td><td>${r.offered}</td><td>${r.picked}</td><td><div class="bar-row"><div class="bar-bg"><div class="bar-fill" style="width:${w}%;background:${bc}"></div></div><span style="color:var(--muted);font-size:.75rem;min-width:3.5rem">${pct}%</span></div></td><td style="color:var(--muted)">${r.skipped}</td></tr>`;
+  }).join('');
+}
+
+// ── Cards tab controls ────────────────────────────────────────────────────────
+document.querySelectorAll('.sort-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    cardsSortMode=btn.dataset.sort;
+    document.querySelectorAll('.sort-btn').forEach(b=>b.classList.toggle('active',b===btn));
+    buildCardsTable(filteredCardRows());
+  });
+});
+
+document.getElementById('min-offered').addEventListener('input',function(){
+  cardsMinOffered=Number(this.value);
+  document.getElementById('min-offered-val').textContent=this.value;
+  buildCardsTable(filteredCardRows());
+});
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function init() {
+  try {
+    const [rr, cr] = await Promise.all([fetch('/api/runs'), fetch('/api/cards')]);
+    if (!rr.ok) throw new Error(`/api/runs HTTP ${rr.status}`);
+    if (!cr.ok) throw new Error(`/api/cards HTTP ${cr.status}`);
+    [allRuns, allCards] = await Promise.all([rr.json(), cr.json()]);
+    buildDeathsFilters();
+    buildCardsFilters();
+    document.getElementById('loading').style.display='none';
+    document.getElementById('app').style.display='block';
+    refresh();
+  } catch(err) {
+    document.getElementById('loading').textContent=`Failed to load data: ${err.message}`;
+  }
+}
+init();
+</script>
+</body>
+</html>
